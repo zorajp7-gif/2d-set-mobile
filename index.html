@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>2D SET Live</title>
+<style>
+:root{--bg:#0b0f14;--card:#121821;--card2:#18212c;--text:#f4f7fb;--muted:#8f9aaa;--green:#00c853;--red:#ff5252;--line:#26313e}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Arial,sans-serif}
+.header{padding:18px 18px 14px;background:#0b0f14;position:sticky;top:0;z-index:3;border-bottom:1px solid var(--line)}
+.title{font-size:22px;font-weight:800}.sub{color:var(--muted);font-size:12px;margin-top:4px}
+.nav{display:flex;background:#10161e;border-bottom:1px solid var(--line);position:sticky;top:67px;z-index:3}
+.nav button{flex:1;padding:13px 4px;background:transparent;color:var(--muted);border:0;font-weight:700}.nav button.active{color:var(--green);border-bottom:2px solid var(--green)}
+.page{display:none;padding:16px 14px 90px}.page.active{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:17px;margin-bottom:14px}
+.center{text-align:center}.label{font-size:12px;color:var(--muted);letter-spacing:.5px}.big{font-size:72px;font-weight:900;line-height:1.05;margin:8px 0 10px}
+.badge{display:inline-block;padding:6px 12px;border-radius:99px;font-size:12px;font-weight:800;background:#26313e;color:#d8dee7}.open{background:#063d20;color:#67f29a}.closed{background:#402020;color:#ff9b9b}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.value{font-size:24px;font-weight:800;margin-top:7px}
+.row{display:flex;justify-content:space-between;gap:10px}.muted{color:var(--muted);font-size:12px}
+.status{font-size:12px;margin-top:10px}.ok{color:#67f29a}.err{color:#ff8b8b}
+button.primary{width:100%;padding:13px;border:0;border-radius:11px;background:var(--green);color:#001b0a;font-weight:900;margin-top:10px}
+input{width:100%;padding:13px;border-radius:10px;border:1px solid var(--line);background:#0c1219;color:var(--text);font-size:14px;margin-top:7px}
+table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:10px 5px;border-bottom:1px solid var(--line);text-align:left}th{color:var(--muted)}
+.small2d{font-size:18px;font-weight:900}
+</style>
+</head>
+<body>
+<div class="header"><div class="title">2D SET Live</div><div class="sub">Live SET Index &amp; 2D</div></div>
+<div class="nav">
+<button id="nHome" class="active" onclick="show('home')">HOME</button>
+<button id="nHistory" onclick="show('history')">HISTORY</button>
+<button id="nSettings" onclick="show('settings')">SETTINGS</button>
+</div>
+
+<section id="home" class="page active">
+  <div class="card center">
+    <div class="label">CURRENT 2D</div>
+    <div id="twod" class="big">--</div>
+    <span id="market" class="badge">Loading</span>
+    <div id="updated" class="muted" style="margin-top:10px">Waiting for live data...</div>
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="label">SET INDEX</div><div id="setLast" class="value">--</div></div>
+    <div class="card"><div class="label">SET VALUE</div><div id="setValue" class="value">--</div></div>
+  </div>
+
+  <div class="card">
+    <div class="row"><span class="label">SESSION</span><b id="session">--</b></div>
+    <div class="row" style="margin-top:10px"><span class="label">SOURCE TIME</span><span id="sourceTime" class="muted">--</span></div>
+    <div id="msg" class="status">Auto refresh every 5 seconds</div>
+  </div>
+  <button class="primary" onclick="loadLive()">REFRESH NOW</button>
+</section>
+
+<section id="history" class="page">
+  <div class="card">
+    <div class="row"><h3 style="margin:0">2D History</h3><span class="muted">Latest 50</span></div>
+    <div style="overflow:auto;margin-top:12px">
+      <table><thead><tr><th>Time</th><th>SET</th><th>VALUE</th><th>2D</th></tr></thead><tbody id="hist"></tbody></table>
+    </div>
+  </div>
+</section>
+
+<section id="settings" class="page">
+  <div class="card">
+    <h3 style="margin-top:0">Live API</h3>
+    <div class="label">API / JSON URL</div>
+    <input id="url" autocomplete="off" placeholder="https://example.com/api/live">
+    <button class="primary" onclick="saveUrl()">SAVE LINK</button>
+    <button class="primary" onclick="testConnection()">TEST CONNECTION</button>
+    <div id="testmsg" class="status"></div>
+  </div>
+  <div class="card">
+    <div class="label">DEFAULT BACKEND</div>
+    <div class="muted" style="margin-top:7px;word-break:break-all">https://twod-set-backend-2.onrender.com/api/live</div>
+  </div>
+</section>
+
+<script>
+const DEFAULT_URL="https://twod-set-backend-2.onrender.com/api/live";
+const REFRESH_MS=5000;
+function getSavedUrl(){return (window.AndroidBridge&&AndroidBridge.getUrl())||localStorage.getItem("api_url")||DEFAULT_URL}
+function saveUrl(){
+ const u=document.getElementById("url").value.trim();
+ if(!/^https?:\/\//i.test(u)){document.getElementById("testmsg").innerHTML='<span class="err">Enter a valid http/https URL.</span>';return}
+ localStorage.setItem("api_url",u); if(window.AndroidBridge) AndroidBridge.saveUrl(u);
+ document.getElementById("testmsg").innerHTML='<span class="ok">API link saved.</span>';
+}
+function show(id){
+ document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+ document.getElementById(id).classList.add("active");
+ document.querySelectorAll(".nav button").forEach(b=>b.classList.remove("active"));
+ document.getElementById(id==="home"?"nHome":id==="history"?"nHistory":"nSettings").classList.add("active");
+ if(id==="history")renderHistory();
+}
+function calc2d(a,b){
+ const s1=String(a??"").replace(/,/g,""), s2=String(b??"").replace(/,/g,"");
+ const dec=s1.includes(".")?s1.split(".")[1]:"", integer=s2.split(".")[0].replace(/\D/g,"");
+ return /^\d$/.test(dec.slice(-1))&&/^\d$/.test(integer.slice(-1))?dec.slice(-1)+integer.slice(-1):"--";
+}
+function normalize(d){
+ const x=d&&d.data&&typeof d.data==="object"?d.data:d;
+ return {setLast:x.setLast??x.set_last??x.set??x.SET, setValue:x.setValue??x.set_value??x.value??x.VALUE,
+ result2D:x.result2D??x.twoD??x["2d"], session:x.session, marketStatus:x.marketStatus, sourceTimestamp:x.sourceTimestamp, timestamp:x.timestamp};
+}
+async function fetchLive(){
+ const r=await fetch(getSavedUrl(),{cache:"no-store"}); if(!r.ok)throw new Error("HTTP "+r.status); return normalize(await r.json());
+}
+async function loadLive(){
+ try{
+   const n=await fetchLive(), two=n.result2D||calc2d(n.setLast,n.setValue);
+   document.getElementById("twod").textContent=two||"--";
+   document.getElementById("setLast").textContent=n.setLast??"--";
+   document.getElementById("setValue").textContent=n.setValue??"--";
+   document.getElementById("session").textContent=n.session??"--";
+   document.getElementById("sourceTime").textContent=n.sourceTimestamp??"--";
+   const m=document.getElementById("market"), open=String(n.marketStatus||"").toLowerCase().includes("open");
+   m.textContent=n.marketStatus||"Unknown"; m.className="badge "+(open?"open":"closed");
+   document.getElementById("updated").textContent="Updated: "+new Date(n.timestamp||Date.now()).toLocaleString();
+   document.getElementById("msg").innerHTML='<span class="ok">Live connection OK • refresh 5s</span>';
+   addHistory(n.setLast,n.setValue,two);
+ }catch(e){
+   document.getElementById("msg").innerHTML='<span class="err">Live connection failed: '+e.message+'</span>';
+ }
+}
+async function testConnection(){
+ document.getElementById("testmsg").textContent="Testing...";
+ try{
+   const n=await fetchLive(), two=n.result2D||calc2d(n.setLast,n.setValue);
+   document.getElementById("testmsg").innerHTML='<span class="ok">Connection OK<br>SET Last: '+n.setLast+'<br>SET Value: '+n.setValue+'<br>2D: <b>'+two+'</b></span>';
+ }catch(e){document.getElementById("testmsg").innerHTML='<span class="err">Connection failed: '+e.message+'</span>'}
+}
+function addHistory(a,b,t){
+ if(t==="--")return;
+ let h=JSON.parse(localStorage.getItem("history")||"[]");
+ const key=String(a)+"|"+String(b)+"|"+String(t);
+ if(h[0]&&h[0].key===key)return;
+ h.unshift({key,time:new Date().toLocaleString(),a,b,t}); h=h.slice(0,50);
+ localStorage.setItem("history",JSON.stringify(h));
+}
+function renderHistory(){
+ const h=JSON.parse(localStorage.getItem("history")||"[]");
+ document.getElementById("hist").innerHTML=h.map(x=>'<tr><td>'+x.time+'</td><td>'+x.a+'</td><td>'+x.b+'</td><td class="small2d">'+x.t+'</td></tr>').join("")||'<tr><td colspan="4" class="muted">No history yet</td></tr>';
+}
+document.getElementById("url").value=getSavedUrl();
+loadLive();
+setInterval(loadLive,REFRESH_MS);
+</script>
+</body>
+</html>
